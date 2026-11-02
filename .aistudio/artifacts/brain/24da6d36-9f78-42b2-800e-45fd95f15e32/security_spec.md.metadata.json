@@ -1,0 +1,6 @@
+{
+  "summary": "Security specification for Firestore rules including data invariants, 'Dirty Dozen' test payloads, and a test runner plan to verify permission denials.",
+  "updatedAt": "2026-11-02T22:04:31.011455647Z",
+  "requestFeedback": true,
+  "userFacing": true
+}

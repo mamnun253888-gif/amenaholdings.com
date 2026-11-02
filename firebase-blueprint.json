@@ -1,0 +1,52 @@
+{
+  "entities": {
+    "User": {
+      "title": "ISP Customer",
+      "description": "Customer billing information and line status",
+      "type": "object",
+      "properties": {
+        "billId": { "type": "string", "description": "Unique Billing ID (e.g., BILL-101)" },
+        "name": { "type": "string" },
+        "package": { "type": "string" },
+        "speed": { "type": "string" },
+        "amount": { "type": "number" },
+        "expiryDate": { "type": "string", "format": "date" },
+        "status": { "type": "string", "enum": ["Active", "Expired"] },
+        "phoneNumber": { "type": "string" }
+      },
+      "required": ["billId", "name", "amount", "status"]
+    },
+    "Transaction": {
+      "title": "bKash Transaction",
+      "description": "Recorded bKash payment transaction",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "paymentId": { "type": "string" },
+        "trxId": { "type": "string" },
+        "merchantNumber": { "type": "string" },
+        "customerNumber": { "type": "string" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "invoiceNumber": { "type": "string" },
+        "reference": { "type": "string" },
+        "status": { "type": "string", "enum": ["Completed", "Initiated", "Refunded"] },
+        "timestamp": { "type": "string" },
+        "environment": { "type": "string", "enum": ["sandbox", "production"] },
+        "customerName": { "type": "string" },
+        "lineStatus": { "type": "string", "enum": ["Up", "Down"] }
+      },
+      "required": ["trxId", "amount", "invoiceNumber", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{billId}": {
+      "schema": "User",
+      "description": "ISP Customers indexed by Bill ID"
+    },
+    "/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Global transaction log"
+    }
+  }
+}

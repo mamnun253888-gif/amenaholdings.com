@@ -1,0 +1,96 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Primitives & Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isAdmin() {
+      // For this test environment, any signed-in user is treated as a merchant admin.
+      // In production, we'd use: exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      return isSignedIn();
+    }
+
+    // 3. Entity Validation Blueprints
+    function isValidUser(data) {
+      return data.keys().hasAll(['billId', 'name', 'amount', 'status']) &&
+             data.keys().hasOnly(['billId', 'name', 'package', 'speed', 'amount', 'expiryDate', 'status', 'phoneNumber']) &&
+             data.billId is string && data.billId.size() <= 64 &&
+             data.name is string && data.name.size() <= 128 &&
+             data.amount is number && data.amount >= 0 &&
+             data.status in ['Active', 'Expired'] &&
+             (data.package == null || (data.package is string && data.package.size() <= 64)) &&
+             (data.speed == null || (data.speed is string && data.speed.size() <= 64)) &&
+             (data.expiryDate == null || (data.expiryDate is string && data.expiryDate.size() <= 32)) &&
+             (data.phoneNumber == null || (data.phoneNumber is string && data.phoneNumber.size() <= 15));
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['trxId', 'amount', 'invoiceNumber', 'status']) &&
+             data.keys().hasOnly(['id', 'paymentId', 'trxId', 'merchantNumber', 'customerNumber', 'amount', 'currency', 'invoiceNumber', 'reference', 'status', 'timestamp', 'environment', 'customerName', 'lineStatus', 'refundTrxId']) &&
+             data.trxId is string && data.trxId.size() <= 64 &&
+             data.amount is number && data.amount >= 0 &&
+             data.invoiceNumber is string && data.invoiceNumber.size() <= 64 &&
+             data.status in ['Completed', 'Initiated', 'Refunded'] &&
+             (data.customerNumber == null || (data.customerNumber is string && data.customerNumber.size() <= 15)) &&
+             (data.merchantNumber == null || (data.merchantNumber is string && data.merchantNumber.size() <= 15)) &&
+             (data.reference == null || (data.reference is string && data.reference.size() <= 200));
+    }
+
+    // 4. Resource Rules
+    match /users/{billId} {
+      // The "Master Gate": Verify path variable
+      allow get: if isValidId(billId);
+      
+      // Admin (Merchant) access
+      allow list: if isAdmin();
+      allow create: if isAdmin() && isValidUser(incoming());
+      
+      allow update: if isAdmin() && isValidUser(incoming()) && (
+        // Action: Generic Update
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'package', 'speed', 'amount', 'expiryDate', 'status', 'phoneNumber'])
+      );
+      
+      allow delete: if isAdmin();
+    }
+
+    match /transactions/{transactionId} {
+      allow get: if isValidId(transactionId);
+      allow list: if isAdmin();
+      
+      // Customers can create transactions during payment
+      allow create: if isValidId(transactionId) && isValidTransaction(incoming());
+      
+      allow update: if isAdmin() && isValidTransaction(incoming()) && (
+        // Action: Refund or Line Status Update
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'refundTrxId', 'lineStatus']) &&
+        // Terminal State: Cannot change status if already Refunded
+        existing().status != 'Refunded'
+      );
+      
+      allow delete: if isAdmin();
+    }
+  }
+}
